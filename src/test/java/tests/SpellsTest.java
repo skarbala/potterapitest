@@ -2,15 +2,14 @@ package tests;
 
 import io.restassured.RestAssured;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static io.restassured.RestAssured.when;
+import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 
@@ -47,7 +46,7 @@ public class SpellsTest {
         List<HashMap<Object, String>> spells =
                 when().get()
                         .then().extract().response()
-                        .jsonPath().getList("$.isUnforgivable");
+                        .jsonPath().getList("$");
 
         spells.forEach(spell -> {
             assertThat(spell.get("effect"), not(emptyOrNullString()));
@@ -64,7 +63,48 @@ public class SpellsTest {
 
     @Test
     void itShouldContainAvadaKedavra() {
-       when().get().then().extract().response().jsonPath().getList("$.spell").size();
+        when().get().then().extract().response().jsonPath().getList("$.spell").size();
+    }
 
+    @Test
+    void itShouldContainSpecificSpells() {
+        String[] expectedSpells = new String[]{"Avada Kedavra", "Crucio", "Imperio"};
+        List<String> actualSpells = when().get().then().extract().jsonPath().getList("spell");
+        assertThat(actualSpells, hasItems(expectedSpells));
+    }
+
+    @Test
+    void statusLineShouldContainOK() {
+        when().get().then().statusLine(containsString("OK"));
+    }
+
+    @Test
+    void itShouldContainCurseSpells() {
+        List<HashMap<Object, String>> spells = when().get().then().extract().jsonPath().getList("$");
+
+        spells = spells.stream()
+                .filter(spell -> spell.get("type").equals("Curse"))
+                .collect(toList());
+
+        assertThat(spells, hasSize(greaterThan(0)));
+    }
+
+    @Test
+    void itShouldFindSpellIdAndSendItAsParameter() {
+        List<HashMap<Object, String>> spells = when().get().then().extract().jsonPath().getList("$");
+
+        String id = spells.stream()
+                .filter(spell -> spell.get("spell").equals("Avada Kedavra"))
+                .findFirst()
+                .orElseThrow(()-> new RuntimeException("Spell not found"))
+                .get("id");
+
+        given().pathParam("spellId", id)
+                .when().get("/{spellId}")
+                .then().statusCode(200).statusLine(containsString("OK"))
+                .body("spell", equalTo("Avada Kedavra"))
+                .body("effect", equalTo("murders opponent"))
+                .body("type", equalTo("Curse"))
+                .body("isUnforgivable", is(true));
     }
 }
