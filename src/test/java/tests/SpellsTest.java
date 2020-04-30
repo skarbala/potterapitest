@@ -1,10 +1,13 @@
 package tests;
 
+import com.github.javafaker.Faker;
+import exceptions.SpellNotFoundException;
 import io.restassured.RestAssured;
+import io.restassured.http.ContentType;
+import models.Spell;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
 import java.util.List;
 
 import static io.restassured.RestAssured.given;
@@ -43,22 +46,22 @@ public class SpellsTest {
 
     @Test
     void itShouldReturnSpellForEachSpellInList() {
-        List<HashMap<Object, String>> spells =
+        List<Spell> spells =
                 when().get()
                         .then().extract().response()
-                        .jsonPath().getList("$");
+                        .jsonPath().getList("$", Spell.class);
 
         spells.forEach(spell -> {
-            assertThat(spell.get("effect"), not(emptyOrNullString()));
-            assertThat(spell.get("spell"), not(emptyOrNullString()));
-            assertThat(spell.get("id"), not(emptyOrNullString()));
+            assertThat(spell.getEffect(), not(emptyOrNullString()));
+            assertThat(spell.getSpell(), not(emptyOrNullString()));
+            assertThat(spell.getId(), not(emptyOrNullString()));
         });
     }
 
     @Test
     void itShouldReturnExactNumberOfSpells() {
         int size = when().get().then().extract().response().jsonPath().getList("$").size();
-        assertThat(size, is(151));
+        assertThat(size, greaterThanOrEqualTo(151));
     }
 
     @Test
@@ -75,36 +78,63 @@ public class SpellsTest {
 
     @Test
     void statusLineShouldContainOK() {
-        when().get().then().statusLine(containsString("OK"));
+        when().get().then().log().status().statusLine(containsString("OK"));
     }
 
     @Test
     void itShouldContainCurseSpells() {
-        List<HashMap<Object, String>> spells = when().get().then().extract().jsonPath().getList("$");
+        List<Spell> spells = when().get().then().extract().jsonPath().getList("$", Spell.class);
 
-        spells = spells.stream()
-                .filter(spell -> spell.get("type").equals("Curse"))
+        spells = spells.stream().filter(object -> object.getType().equals("Curse"))
                 .collect(toList());
-
-        assertThat(spells, hasSize(greaterThan(0)));
+        assertThat(spells, hasSize(greaterThan(10)));
     }
 
     @Test
-    void itShouldFindSpellIdAndSendItAsParameter() {
-        List<HashMap<Object, String>> spells = when().get().then().extract().jsonPath().getList("$");
+    void itShouldFindSpellIdAndSendItAsParameter() throws SpellNotFoundException {
+        String spellToFind = "Avada Kedavra";
 
-        String id = spells.stream()
-                .filter(spell -> spell.get("spell").equals("Avada Kedavra"))
+        List<Spell> spells = when().get().then().extract().jsonPath().getList("$", Spell.class);
+        // ziskam ID
+        String id = spells.stream().filter(spell -> spell.getSpell().equals(spellToFind))
                 .findFirst()
-                .orElseThrow(()-> new RuntimeException("Spell not found"))
-                .get("id");
-
+                .orElseThrow(() -> new SpellNotFoundException(spellToFind))
+                .getId();
+        // id pouzijem ako path parameter
         given().pathParam("spellId", id)
                 .when().get("/{spellId}")
                 .then().statusCode(200).statusLine(containsString("OK"))
-                .body("spell", equalTo("Avada Kedavra"))
+                .body("spell", equalTo(spellToFind))
                 .body("effect", equalTo("murders opponent"))
                 .body("type", equalTo("Curse"))
                 .body("isUnforgivable", is(true));
+    }
+
+    @Test
+    void itShouldFilterSpellsBasedOnQueryType() {
+        List<Spell> spells = given().queryParam("type", "Curse")
+                .when().get().then().extract().jsonPath().getList("$", Spell.class);
+
+        spells.forEach(spell -> assertThat(spell.getType(), equalTo("Curse")));
+        assertThat(spells, hasSize(greaterThan(10)));
+    }
+
+    @Test
+    void itShouldAddNewSpell() {
+        Faker faker = new Faker();
+        Spell spell = new Spell(
+                "Corona".concat(faker.letterify("????")),
+                "Curse",
+                "sneezing forever",
+                true
+        );
+        //2 pomocou POST poslem toto kuzlo serveru
+        given().contentType(ContentType.JSON)
+                .body(spell)
+                .when().post()
+                .then()
+                .statusCode(201)
+                .body("message", equalTo("Spell created"))
+                .body("spell.id", not(emptyOrNullString()));
     }
 }
