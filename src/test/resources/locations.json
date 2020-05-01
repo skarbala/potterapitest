@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "properties": {
+    "locations": {
+      "type": "array",
+      "items": {
+        "required": ["id","int_id","active"],
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+
+  }
+}

@@ -9,6 +9,7 @@ import java.text.SimpleDateFormat;
 import java.util.concurrent.TimeUnit;
 
 import static io.restassured.RestAssured.given;
+import static io.restassured.module.jsv.JsonSchemaValidator.matchesJsonSchemaInClasspath;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.lessThan;
 
@@ -34,8 +35,8 @@ public class KiwiTest {
                 .when().get("/locations")
                 .then().statusCode(200)
                 .and().body("locations.name", hasItems(expectedStations))
-                .extract().path("locations.name");
-    }
+                .and().body(matchesJsonSchemaInClasspath("locations.json"))
+                .extract().path("locations.name") ;}
 
     @Test
     void jsonPathShowtime() {
