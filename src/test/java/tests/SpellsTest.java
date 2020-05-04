@@ -6,12 +6,14 @@ import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
 import models.Spell;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static io.restassured.RestAssured.given;
 import static io.restassured.RestAssured.when;
+import static io.restassured.module.jsv.JsonSchemaValidator.matchesJsonSchemaInClasspath;
 import static java.util.stream.Collectors.toList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -23,6 +25,11 @@ public class SpellsTest {
         RestAssured.baseURI = "http://localhost";
         RestAssured.port = 3000;
         RestAssured.basePath = "/spells";
+    }
+
+    @BeforeEach
+    void reset(){
+        when().get("actions/reset").then().statusCode(200);
     }
 
     @Test
@@ -61,12 +68,7 @@ public class SpellsTest {
     @Test
     void itShouldReturnExactNumberOfSpells() {
         int size = when().get().then().extract().response().jsonPath().getList("$").size();
-        assertThat(size, greaterThanOrEqualTo(151));
-    }
-
-    @Test
-    void itShouldContainAvadaKedavra() {
-        when().get().then().extract().response().jsonPath().getList("$.spell").size();
+        assertThat(size, equalTo(151));
     }
 
     @Test
@@ -121,9 +123,8 @@ public class SpellsTest {
 
     @Test
     void itShouldAddNewSpell() {
-        Faker faker = new Faker();
         Spell spell = new Spell(
-                "Corona".concat(faker.letterify("????")),
+                "Corona",
                 "Curse",
                 "sneezing forever",
                 true
@@ -132,9 +133,69 @@ public class SpellsTest {
         given().contentType(ContentType.JSON)
                 .body(spell)
                 .when().post()
-                .then()
+                .then().log().body()
                 .statusCode(201)
                 .body("message", equalTo("Spell created"))
                 .body("spell.id", not(emptyOrNullString()));
+    }
+
+    @Test
+    void itShouldAddNewSpellWithMultipleWords() {
+        Spell spell = new Spell(
+                "Accio Corona Dante",
+                "Curse",
+                "sneezing forever",
+                true
+        );
+        //2 pomocou POST poslem toto kuzlo serveru
+        given().contentType(ContentType.JSON)
+                .body(spell)
+                .when().post()
+                .then().log().body()
+                .statusCode(201)
+                .body("message", equalTo("Spell created"))
+                .body("spell.id", not(emptyOrNullString()));
+    }
+
+    @Test
+    void itShouldUpdateSpell() {
+        Spell spell = new Spell(
+                "Accio Corona Dantes",
+                "Curse",
+                "sneezing forever",
+                true
+        );
+        //2 pomocou POST poslem toto kuzlo serveru
+        String id = given().contentType(ContentType.JSON)
+                .body(spell)
+                .when().post()
+                .then().log().body()
+                .statusCode(201)
+                .body("message", equalTo("Spell created")).extract().jsonPath().get("spell.id");
+
+        Spell newSpell = new Spell("Accio Nimbuz","Hex","summons a broom",false);
+
+        given().contentType(ContentType.JSON)
+                .pathParam("idOfSpell", id)
+                .body(newSpell)
+                .when().put("/{idOfSpell}")
+                .then().statusCode(201)
+                .and().body("message",equalTo("Spell updated"));
+        given().pathParam("id", id).when().get("/{id}")
+                .then().body("effect",equalTo("summons a broom"));
+    }
+
+    @Test
+    void itShouldEraseAllSpells(){
+        when().get("actions/deleteAll").then().statusCode(200);
+        int size = when().get().then().extract().response().jsonPath().getList("$").size();
+        assertThat(size, equalTo(0));
+    }
+
+    @Test
+    void itShouldReturnSpecificSpellMatchingSchema() {
+        given()
+                .pathParam("id", "5b74ef813228320021ab624c")
+                .when().get("/{id}").then().body(matchesJsonSchemaInClasspath("spell_schema.json"));
     }
 }
